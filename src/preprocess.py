@@ -1,37 +1,42 @@
-"""Shared text-cleaning helpers used by both training and inference scripts."""
+"""Shared text preprocessing utilities used across the project."""
+
+from __future__ import annotations
 
 import re
-import nltk
+from typing import Iterable
+
 import pandas as pd
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
+from nltk.stem import PorterStemmer
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
-# Download once on import so any standalone script can rely on the resources.
-nltk.download("stopwords", quiet=True)
-nltk.download("wordnet", quiet=True)
-nltk.download("omw-1.4", quiet=True)
+TOKEN_PATTERN = re.compile(r"[a-z]+")
+stemmer = PorterStemmer()
+stop_words = set(ENGLISH_STOP_WORDS)
 
-stop_words = set(stopwords.words("english"))
-lemmatizer = WordNetLemmatizer()
+
+def tokenize(text: str) -> list[str]:
+    """Normalize text into lowercase alphabetic tokens."""
+    normalized = str(text).lower()
+    return TOKEN_PATTERN.findall(normalized)
+
+
+def normalize_tokens(tokens: Iterable[str]) -> list[str]:
+    """Remove stop words and stem remaining tokens for sparse text models."""
+    return [stemmer.stem(token) for token in tokens if token not in stop_words]
 
 
 def clean_text(text: str) -> str:
-    """Normalize complaint text into a lightweight bag-of-words friendly form."""
-    # Lowercasing collapses duplicate features such as "Debt" and "debt".
-    text = str(text).lower()
-    # Strip punctuation and digits because the TF-IDF models are word-based.
-    text = re.sub(r"[^a-zA-Z\s]", " ", text)
-    words = text.split()
-    # Remove common filler words so the models focus on complaint-specific terms.
-    words = [w for w in words if w not in stop_words]
-    # Lemmatization helps map simple word variants to one base form.
-    words = [lemmatizer.lemmatize(w) for w in words]
-    return " ".join(words)
+    """Convert complaint text into a compact normalized string."""
+    tokens = tokenize(text)
+    normalized_tokens = normalize_tokens(tokens)
+    return " ".join(normalized_tokens)
 
 
-def preprocess_dataframe(df: pd.DataFrame, text_column: str = "complaint_text") -> pd.DataFrame:
-    """Return a copy with a cleaned text column expected by model scripts."""
-    # Work on a copy so callers do not get accidental in-place mutations.
-    df = df.copy()
-    df["clean_text"] = df[text_column].apply(clean_text)
-    return df
+def preprocess_dataframe(
+    df: pd.DataFrame,
+    text_column: str = "complaint_text",
+) -> pd.DataFrame:
+    """Return a copy with cleaned complaint text ready for vectorization."""
+    processed = df.copy()
+    processed["clean_text"] = processed[text_column].astype(str).map(clean_text)
+    return processed

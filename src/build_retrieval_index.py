@@ -1,35 +1,50 @@
 """Build and save the TF-IDF retrieval index used for nearest-neighbor lookup."""
 
-import os
+from __future__ import annotations
+
 import joblib
 import pandas as pd
-
 from sklearn.feature_extraction.text import TfidfVectorizer
-from preprocess import preprocess_dataframe
 
-os.makedirs("models", exist_ok=True)
+from src.config import TrainingConfig, get_project_paths
+from src.preprocess import preprocess_dataframe
 
-print("Loading issue training data...")
-df = pd.read_csv("data/train_issues.csv")
 
-# Reuse the same cleaning logic as the classifiers so feature spaces stay aligned.
-df = preprocess_dataframe(df, text_column="complaint_text")
+def build_retrieval_index(
+    source_df: pd.DataFrame | None = None,
+    config: TrainingConfig | None = None,
+) -> dict[str, int]:
+    """Build and persist retrieval artifacts from the issue dataset."""
+    config = config or TrainingConfig()
+    paths = get_project_paths()
+    paths.models_dir.mkdir(parents=True, exist_ok=True)
 
-retrieval_vectorizer = TfidfVectorizer(
-    max_features=20000,
-    ngram_range=(1, 2),
-    min_df=2
-)
+    if source_df is None:
+        if not paths.issue_dataset.exists():
+            raise FileNotFoundError(
+                f"Missing {paths.issue_dataset}. Run `python -m src.prepare_dataset` first."
+            )
+        source_df = pd.read_csv(paths.issue_dataset)
 
-# Persist both the sparse matrix and the source rows needed to explain matches.
-X_retrieval = retrieval_vectorizer.fit_transform(df["clean_text"])
+    processed_df = preprocess_dataframe(source_df, text_column="complaint_text")
+    vectorizer = TfidfVectorizer(
+        max_features=config.retrieval_max_features,
+        ngram_range=(config.ngram_min, config.ngram_max),
+        min_df=config.min_document_frequency,
+    )
+    retrieval_matrix = vectorizer.fit_transform(processed_df["clean_text"])
 
-# Save every artifact needed to reproduce retrieval at inference time.
-joblib.dump(retrieval_vectorizer, "models/retrieval_vectorizer.pkl")
-joblib.dump(X_retrieval, "models/retrieval_matrix.pkl")
-df.to_pickle("models/retrieval_df.pkl")
+    joblib.dump(vectorizer, paths.retrieval_vectorizer)
+    joblib.dump(retrieval_matrix, paths.retrieval_matrix)
+    processed_df.to_pickle(paths.retrieval_dataframe)
 
-print("Saved retrieval index artifacts:")
-print("- models/retrieval_vectorizer.pkl")
-print("- models/retrieval_matrix.pkl")
-print("- models/retrieval_df.pkl")
+    summary = {
+        "rows": int(processed_df.shape[0]),
+        "columns": int(retrieval_matrix.shape[1]),
+    }
+    print(f"Saved retrieval artifacts to {paths.models_dir}")
+    return summary
+
+
+if __name__ == "__main__":
+    build_retrieval_index()

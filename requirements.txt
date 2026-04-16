@@ -12,6 +12,10 @@ nltk==3.8.1
 # App UI
 streamlit==1.35.0
 
+# Optional API
+fastapi==0.115.0
+uvicorn==0.30.6
+
 # OpenAI API
 openai==1.35.0
 python-dotenv==1.0.1

@@ -1,14 +1,31 @@
 """OpenAI wrapper that turns structured model outputs into analyst-facing notes."""
 
-import os
+from __future__ import annotations
+
 import json
+import os
+from typing import Any
+
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from src.config import RuntimeConfig
+
 load_dotenv()
 
-# A missing key will be handled later by the try/except fallback path.
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def _fallback_payload(reason: str, review_flag: bool) -> dict[str, Any]:
+    """Return a stable response when LLM enrichment is unavailable."""
+    return {
+        "summary": "LLM enrichment is unavailable for this run.",
+        "urgency": "Unknown",
+        "explanation": reason,
+        "case_note": "Generated from the rule-based fallback path.",
+        "recommended_action": "Review the model outputs and retrieved cases manually.",
+        "needs_human_review": True if review_flag else False,
+        "llm_status": "fallback",
+        "llm_error": reason,
+    }
 
 
 def analyze_complaint_with_openai(
@@ -16,24 +33,32 @@ def analyze_complaint_with_openai(
     predicted_product: str,
     predicted_issue: str,
     confidence: float,
-    similar_cases: list,
-    review_flag: bool
-) -> dict:
+    similar_cases: list[dict[str, Any]],
+    review_flag: bool,
+) -> dict[str, Any]:
     """Ask the LLM for concise commentary while preserving a fixed JSON shape."""
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        return _fallback_payload("OPENAI_API_KEY is not configured.", review_flag)
 
-    # Only send compact summaries of retrieved matches to keep the prompt focused.
-    similar_cases_text = "\n".join([
-        f"- Similarity: {case['similarity']}, Product: {case['product']}, Issue: {case['issue']}"
-        for case in similar_cases
-    ])
+    runtime = RuntimeConfig()
+    client = OpenAI(api_key=api_key, timeout=runtime.openai_timeout_seconds)
+
+    similar_cases_text = "\n".join(
+        [
+            f"- Similarity: {case['similarity']}, Product: {case['product']}, Issue: {case['issue']}"
+            for case in similar_cases
+        ]
+    )
 
     messages = [
         {
             "role": "developer",
             "content": (
-                "You are an AI analyst for a complaint intelligence system called RootCause AI. "
-                "Return concise, professional outputs only."
-            )
+                "You are an AI analyst for RootCause AI. "
+                "Return concise, professional outputs only. "
+                "If confidence is low, explicitly recommend human review."
+            ),
         },
         {
             "role": "user",
@@ -55,11 +80,10 @@ Needs human review:
 
 Top similar historical cases:
 {similar_cases_text}
-"""
-        }
+""",
+        },
     ]
 
-    # Force a predictable schema so the UI does not need to parse free-form prose.
     schema = {
         "type": "json_schema",
         "json_schema": {
@@ -72,7 +96,7 @@ Top similar historical cases:
                     "explanation": {"type": "string"},
                     "case_note": {"type": "string"},
                     "recommended_action": {"type": "string"},
-                    "needs_human_review": {"type": "boolean"}
+                    "needs_human_review": {"type": "boolean"},
                 },
                 "required": [
                     "summary",
@@ -80,32 +104,23 @@ Top similar historical cases:
                     "explanation",
                     "case_note",
                     "recommended_action",
-                    "needs_human_review"
+                    "needs_human_review",
                 ],
-                "additionalProperties": False
-            }
-        }
+                "additionalProperties": False,
+            },
+        },
     }
 
     try:
-        # Structured output keeps the app response predictable for the UI layer.
         response = client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=runtime.openai_model,
             messages=messages,
-            response_format=schema
+            response_format=schema,
         )
-
-        # The API returns the structured object as a JSON string in message content.
         content = response.choices[0].message.content
-        return json.loads(content)
-
-    except Exception as e:
-        # Fall back to safe defaults so classification results still render.
-        return {
-            "summary": "Unable to generate summary.",
-            "urgency": "Unknown",
-            "explanation": f"OpenAI error: {str(e)}",
-            "case_note": "Unable to generate case note.",
-            "recommended_action": "Manual review recommended.",
-            "needs_human_review": True
-        }
+        parsed = json.loads(content)
+        parsed["llm_status"] = "success"
+        parsed["llm_error"] = ""
+        return parsed
+    except Exception as exc:
+        return _fallback_payload(f"OpenAI error: {exc}", review_flag)

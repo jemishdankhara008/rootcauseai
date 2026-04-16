@@ -1,0 +1,18 @@
+[
+  {
+    "metric": "Product Accuracy",
+    "value": "0.7179"
+  },
+  {
+    "metric": "Issue Accuracy",
+    "value": "0.3762"
+  },
+  {
+    "metric": "Joint Accuracy",
+    "value": "0.3986"
+  },
+  {
+    "metric": "High-Confidence Accuracy",
+    "value": "0.7111"
+  }
+]
