@@ -1,0 +1,17 @@
+.env
+.venv/
+venv/
+__pycache__/
+data/rows.csv
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store

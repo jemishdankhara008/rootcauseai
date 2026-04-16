@@ -1,0 +1,17 @@
+{
+  "top_products": [
+    "Credit reporting, credit repair services, or other personal consumer reports",
+    "Debt collection",
+    "Mortgage",
+    "Credit reporting",
+    "Student loan",
+    "Credit card or prepaid card",
+    "Credit card",
+    "Bank account or service",
+    "Checking or savings account",
+    "Consumer Loan"
+  ],
+  "top_issue_count": 66,
+  "product_train_rows": 40000,
+  "issue_train_rows": 25000
+}

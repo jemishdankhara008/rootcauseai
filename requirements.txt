@@ -1,0 +1,25 @@
+# Core data processing
+pandas==2.2.2
+numpy==1.26.4
+
+# Machine learning
+scikit-learn==1.5.0
+joblib==1.4.2
+
+# NLP preprocessing
+nltk==3.8.1
+
+# App UI
+streamlit==1.35.0
+
+# OpenAI API
+openai==1.35.0
+python-dotenv==1.0.1
+httpx==0.27.2
+
+# Visualization / optional evaluation
+matplotlib==3.8.4
+
+
+# (Optional but useful for future upgrades)
+scipy==1.13.1
